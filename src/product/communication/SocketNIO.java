@@ -17,6 +17,22 @@ import com.google.gson.JsonParser;
 
 public class SocketNIO {
 	public static final LinkedList<SelectionKey> unregistered = new LinkedList<>();
+	public static final Object mutex = new Object();
+	public static void addUnregisteredSocket(SelectionKey key) {
+		synchronized(mutex) {
+			unregistered.add(key);
+		}
+	}
+	public static void removeUnregisteredSocket(SelectionKey key) {
+		synchronized(mutex) {
+			unregistered.remove(key);
+		}
+	}
+	public static boolean isUnregisteredSocket(SelectionKey key) {
+		synchronized(mutex) {
+			return unregistered.contains(key);
+		}
+	}
 
 	public enum SocketEvent {ACCEPT, DATA, CLOSED}
 	private final Selector selector;

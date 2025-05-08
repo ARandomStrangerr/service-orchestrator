@@ -17,9 +17,6 @@ public class LinkStartSocket extends Link{
 	}
 
 	public boolean exec() {
-		Object mutex = new Object();
-		ChainHandleSocketRequest handleRequest = new ChainHandleSocketRequest();
-		ChainVerifyClientSocket verifyClient = new ChainVerifyClientSocket();
 		SocketNIO soc;
 		try {
 			soc =  new SocketNIO(super.owner.getProcessObject().get("port").getAsInt());
@@ -44,19 +41,18 @@ public class LinkStartSocket extends Link{
 								} catch (IOException e){
 									return;
 								}
-								try {
-									JsonObject processObj = soc.read(key);
-									verifyClient.exec(processObj);
-								} catch (IOException e) { 
-									return;
-								}
 								break;
 							case SocketEvent.DATA:
+								JsonObject processObj;
 								try{
-									JsonObject processObj = soc.read(key);
-									handleRequest.exec(processObj);
+									processObj = soc.read(key);
 								} catch (IOException e){
 									return;
+								}
+								if (SocketNIO.isUnregisteredSocket(key)) {
+									SocketNIO.removeUnregisteredSocket(key);
+								} else {
+									new ChainHandleSocketRequest().exec(processObj);
 								}
 								break;
 							case SocketEvent.CLOSED:
