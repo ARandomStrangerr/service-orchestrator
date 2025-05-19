@@ -2,80 +2,88 @@ package product.communication;
 
 import java.nio.channels.SelectionKey;
 import java.util.EmptyStackException;
+import java.util.HashMap;
 import java.util.LinkedList;
 
 class Node {
-    int key;
-    LinkedList<SelectionKey> value;
-    Node left, right, parent;
+	int activeRequests;
+	SelectionKey connection;
 
-    Node(int key, Node parent) {
-        this.key = key;
-        this.value = new LinkedList<>();
-        this.parent = parent;
-    }
+  Node(int activeRequests, SelectionKey connection) {
+		this.activeRequests = activeRequests;
+		this.connection = connection;
+	}
 }
 
 public class RegisteredSocketStorage {
-    private Node head = null;
+	private static RegisteredSocketStorage instance = null;
 
-    public synchronized void insert(SelectionKey key, int activeRequest) {
-        head = insertRecursive(head, key, activeRequest, null);
-    }
+	public static RegisteredSocketStorage getInstance () {
+		if (instance == null) instance = new RegisteredSocketStorage();
+		return instance;
+	}
 
-    private Node insertRecursive(Node node, SelectionKey key, int activeRequest, Node parent) {
-        if (node == null) {
-            Node newNode = new Node(activeRequest, parent);
-            newNode.value.add(key);
-            return newNode;
-        }
-        if (activeRequest < node.key) {
-            node.left = insertRecursive(node.left, key, activeRequest, node);
-        } else if (activeRequest > node.key) {
-            node.right = insertRecursive(node.right, key, activeRequest, node);
-        } else {
-            node.value.add(key);
-        }
-        return node;
-    }
+	private final HashMap<String, LinkedList<Node>> storage;
 
-    public synchronized SelectionKey getMin() {
-        if (head == null) throw new EmptyStackException();
-        Node node = head;
-        while (node.left != null) node = node.left;
+	public RegisteredSocketStorage(){
+		storage = new HashMap<>();
+	}
 
-        while (node != null && node.value.isEmpty()) {
-            node = successor(node);
-        }
-        if (node == null) throw new EmptyStackException();
+	public void add(String serviceName, SelectionKey connection) {
+		LinkedList<Node> serviceList = null;
+		Node node = new Node(0, connection);
+		if (storage.containsKey(serviceName)) { // case when there is no service under name yet
+			serviceList = new LinkedList<>();
+			storage.put(serviceName, serviceList);
+		} else {
+		 	serviceList = storage.get(serviceName);
+		}
+		serviceList.push(node);
+	}
+	
+	public SelectionKey get(String serviceName) throws EmptyStackException {
+		if (!storage.containsKey(serviceName)) throw new EmptyStackException();
+		LinkedList<Node> serviceList = storage.get(serviceName);
+		Node node = serviceList.pop();
+		node.activeRequests++;
+		if (serviceList.size() == 0) serviceList.push(node);
+		else {
+			int pos = 0;
+			for (Node n : serviceList) {
+				if (n.activeRequests >= node.activeRequests) break;
+				pos++;
+			}
+			serviceList.add(pos, node);
+		}
+		return node.connection;
+	}
 
-        return node.value.poll();
-    }
+	public void giveBack(String serviceName, SelectionKey connection){	
+		if (!storage.containsKey(serviceName)) throw new EmptyStackException();
+		LinkedList<Node> serviceList = storage.get(serviceName);
+		Node node = serviceList.remove(pos(serviceList, connection));
+		node.activeRequests--;
+		int pos = 0;
+		for (Node n : serviceList) {
+			if (n.activeRequests >= node.activeRequests) break;
+			pos++;
+		}
+		serviceList.add(pos, node);
+	}
 
-    public synchronized void remove(SelectionKey key) {
-        removeRecursive(head, key);
-    }
+	public void remove(String serviceName, SelectionKey connection) {
+		if (!storage.containsKey(serviceName)) throw new EmptyStackException();
+		LinkedList<Node> serviceList = storage.get(serviceName);
+		serviceList.remove(pos(serviceList, connection));
+	}
 
-    private void removeRecursive(Node node, SelectionKey key) {
-        if (node == null) return;
-
-        node.value.remove(key);
-        removeRecursive(node.left, key);
-        removeRecursive(node.right, key);
-    }
-
-    private Node successor(Node node) {
-        if (node.right != null) {
-            node = node.right;
-            while (node.left != null) node = node.left;
-            return node;
-        }
-        Node parent = node.parent;
-        while (parent != null && node == parent.right) {
-            node = parent;
-            parent = parent.parent;
-        }
-        return parent;
-    }
+	private int pos(LinkedList<Node> serviceList, SelectionKey connection) {
+		int pos = 0;
+		for (Node node : serviceList){
+			if (node.connection.equals(connection)) break;
+			pos++;
+		}
+		return pos;
+	}
 }
 
